@@ -13,5 +13,6 @@ dependencies:
     - torchtext==0.14.1
     - notebook
     - numpy
+    - pandas
     - spacy==3.4.4
 
