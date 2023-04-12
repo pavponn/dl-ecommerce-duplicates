@@ -9,13 +9,14 @@ from wordcloud import WordCloud
 from sklearn.feature_extraction.text import CountVectorizer
 from pandas import DataFrame
 
+IMG_PATHS = "./data/train_images/"
+
 train_df = pd.read_csv("./data/train.csv")
 test_df = pd.read_csv("./data/test.csv")
 
-def plot(num):
-	IMG_PATHS = "./data/train_images/"
-	sq_num = np.sqrt(num)
-	assert sq_num == int(sq_num), "Number of Images must be a perfect Square!"
+def plot_random_images(nb):
+	sq_num = np.sqrt(nb)
+	assert sq_num == int(sq_num), "Number of Images must be a perfect square for display."
 
 	sq_num = int(sq_num)
 	image_ids = os.listdir(IMG_PATHS)
@@ -24,17 +25,17 @@ def plot(num):
 
 	for i in range(sq_num):
 		for j in range(sq_num):
-			idx = i*sq_num + j
+			idx = i * sq_num + j
 			ax[i, j].axis('off')
 			img = cv2.imread(IMG_PATHS + '/' + image_ids[idx])
 			img = img[:, :, ::-1]
-			ax[i, j].imshow(img); ax[i, j].set_title(f'{image_ids[idx]}', fontsize=6.5)
+			ax[i, j].imshow(img)
+			ax[i, j].set_title(f'{image_ids[idx]}', fontsize=6.5)
 
 	plt.show()
 
-def plot_from_label(group):
-	IMG_PATHS = "./data/train_images/"
-	image_list = train_df[train_df['label_group'] == group]
+def plot_from_label(label):
+	image_list = train_df[train_df['label_group'] == label]
 	image_list = image_list['image'].tolist()
 	num = len(image_list)
 
@@ -49,7 +50,7 @@ def plot_from_label(group):
 
 	for i in range(sq_num):
 		for j in range(sq_num):
-			idx = i*sq_num + j
+			idx = i * sq_num + j
 			ax[i, j].axis('off')
 			img = cv2.imread(path[idx])
 			img = img[:, :, ::-1]
@@ -58,7 +59,6 @@ def plot_from_label(group):
 	plt.show()
 
 def plot_from_title(title):
-	IMG_PATHS = "./data/train_images/"
 	image_list = train_df[train_df['title'] == title]
 	image_list = image_list['image'].tolist()
 	num = len(image_list)
@@ -87,7 +87,7 @@ def get_top_n_words(corpus, n=None):
 	bag_of_words = vec.transform(corpus)
 	sum_words = bag_of_words.sum(axis=0)
 	words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
-	words_freq =sorted(words_freq, key = lambda x: x[1], reverse=True)
+	words_freq = sorted(words_freq, key = lambda x: x[1], reverse=True)
 	return words_freq[:n]
 
 def get_top_n_bigram(corpus, n=None):
@@ -95,7 +95,7 @@ def get_top_n_bigram(corpus, n=None):
 	bag_of_words = vec.transform(corpus)
 	sum_words = bag_of_words.sum(axis=0)
 	words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
-	words_freq =sorted(words_freq, key = lambda x: x[1], reverse=True)
+	words_freq = sorted(words_freq, key = lambda x: x[1], reverse=True)
 	return words_freq[:n]
 
 def get_top_n_trigram(corpus, n=None):
@@ -103,7 +103,7 @@ def get_top_n_trigram(corpus, n=None):
 	bag_of_words = vec.transform(corpus)
 	sum_words = bag_of_words.sum(axis=0)
 	words_freq = [(word, sum_words[0, idx]) for word, idx in vec.vocabulary_.items()]
-	words_freq =sorted(words_freq, key = lambda x: x[1], reverse=True)
+	words_freq = sorted(words_freq, key = lambda x: x[1], reverse=True)
 	return words_freq[:n]
 
 def plot_bt(x,w,p):
@@ -111,7 +111,7 @@ def plot_bt(x,w,p):
 	common_words_df = DataFrame(common_words,columns=['word','freq'])
 
 	plt.figure(figsize=(16, 10))
-	sns.barplot(x='freq', y='word', data=common_words_df,palette=p)
+	sns.barplot(x='freq', y='word', data=common_words_df, palette=p)
 	plt.title("Top 20 "+ w , fontsize=16)
 	plt.xlabel("Frequency", fontsize=14)
 	plt.yticks(fontsize=13)
