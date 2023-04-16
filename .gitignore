@@ -184,3 +184,5 @@ fabric.properties
 # .idea
 
 data/
+
+**/.DS_Store
