@@ -1,12 +1,14 @@
+import os
 import pandas as pd
 import itertools
 import random
 import numpy as np
+from sklearn.model_selection import GroupKFold
+from sklearn.preprocessing import LabelEncoder
 
 """
 Generic dataset utils.
 """
-
 
 def get_dataset(root: str, is_test=False):
     """
@@ -21,7 +23,6 @@ def get_dataset(root: str, is_test=False):
     df['image'] = root + images_folder + df['image']
     return df
 
-
 def add_target(df: pd.DataFrame):
     """
     Adds target column to the pandas dataframe.
@@ -33,7 +34,6 @@ def add_target(df: pd.DataFrame):
     new_df = df.copy()
     new_df['target'] = target
     return new_df
-
 
 def get_contrastive_loss_dataset(df: pd.DataFrame, seed=42):
     random.seed(seed)
@@ -80,3 +80,17 @@ def get_contrastive_loss_dataset(df: pd.DataFrame, seed=42):
     columns = ['posting_id_1', 'posting_id_2', 'image_1', 'image_2', 'title_1', 'title_2', 'label']
     contrastive_loss_df = pd.DataFrame(new_data, columns=columns)
     return contrastive_loss_df
+
+def get_arcface_loss_dataset(csv, data_dir, n_splits, n_samples=None):
+	df_train = pd.read_csv(csv)
+	if n_samples is not None:
+		df_train = df_train.sample(n_samples)
+	df_train['file_path'] = df_train.image.apply(lambda x: os.path.join(data_dir, x))
+	gkf = GroupKFold(n_splits=n_splits)
+	df_train['fold'] = -1
+	df_train = df_train.reset_index(drop=True)
+	for fold, (train_idx, valid_idx) in enumerate(gkf.split(df_train, None, df_train.label_group)):
+		df_train.loc[valid_idx, 'fold'] = fold
+	le = LabelEncoder()
+	df_train.label_group = le.fit_transform(df_train.label_group)
+	return df_train
