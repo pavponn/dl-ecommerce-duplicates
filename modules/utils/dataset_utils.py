@@ -1,7 +1,10 @@
+import os
 import pandas as pd
 import itertools
 import random
 import numpy as np
+from sklearn.model_selection import GroupKFold
+from sklearn.preprocessing import LabelEncoder
 
 """
 Generic dataset utils.
@@ -35,7 +38,52 @@ def add_target(df: pd.DataFrame):
     return new_df
 
 
-def get_contrastive_loss_dataset(df: pd.DataFrame, seed=42):
+def get_contrastive_loss_dataset(df: pd.DataFrame, seed=42, read_path=None):
+    if read_path is not None:
+        try:
+            result_df = pd.read_csv(read_path)
+            if result_df is not None:
+                return result_df
+        except Exception as _e:
+            print(f"Dataset is not saved!\n")
+    samples = []
+    from tqdm import tqdm
+    no_positive = 0
+    for index, row in tqdm(df.iterrows()):
+        posting_id = row['posting_id']
+        label_group = row['label_group']
+
+        positives = df.where((df['label_group'] == label_group) & (df['posting_id'] != posting_id)).dropna()
+        if positives.shape[0] > 0:
+            similar_posting_id = positives.sample(n=1).iloc[0]['posting_id']
+            samples.append((posting_id, similar_posting_id, 1))
+        else:
+            no_positive += 1
+            # positives = df.where((df['label_group'] == label_group)).dropna()
+            # print(f"Not found similarities for {posting_id}, using the same post")
+
+        negatives = df.where(df['label_group'] != label_group).dropna()
+        if negatives.shape[0] > 0:
+            not_similar_posting_id = negatives.sample(n=1).iloc[0]['posting_id']
+            samples.append((posting_id, not_similar_posting_id, 0))
+    images_per_posting = df.groupby('posting_id')['image'].unique().to_dict()  # should be only one value per posting
+    titles_per_posting = df.groupby('posting_id')['title'].unique().to_dict()
+    print(f"not distinct positives: {no_positive}")
+    data = [(sample[0],
+             sample[1],
+             images_per_posting[sample[0]].tolist()[0],
+             images_per_posting[sample[1]].tolist()[0],
+             titles_per_posting[sample[0]].tolist()[0],
+             titles_per_posting[sample[1]].tolist()[0],
+             sample[2]
+             ) for sample in samples
+            ]
+    columns = ['posting_id_1', 'posting_id_2', 'image_1', 'image_2', 'title_1', 'title_2', 'label']
+    contrastive_loss_df = pd.DataFrame(data, columns=columns)
+    return contrastive_loss_df
+
+
+def get_contrastive_loss_dataset_v0(df: pd.DataFrame, seed=42):
     random.seed(seed)
     label_groups = df['label_group'].unique().tolist()
     postings_per_group = df.groupby('label_group')['posting_id'].unique().to_dict()
@@ -45,7 +93,7 @@ def get_contrastive_loss_dataset(df: pd.DataFrame, seed=42):
 
     from tqdm import tqdm
 
-    def get_negative_examples(cur_group_postings, excluded_index, num):
+    def get_negative_examples(cur_group_postings, excluded_index, num, max_positives_per_group=20):
         sample_group_ids = list(range(len(label_groups)))
         sample_group_ids.remove(excluded_index)
         negative_group_ids = random.sample(sample_group_ids, num)
@@ -62,7 +110,8 @@ def get_contrastive_loss_dataset(df: pd.DataFrame, seed=42):
         number_of_neg_examples = len(group_postings)
         negative_examples = get_negative_examples(group_postings, i, number_of_neg_examples)
         random.shuffle(negative_examples)
-        negative_examples = negative_examples[:len(positive_examples)]  # let's keep ratio of positive to negatives ~ 1:1
+        negative_examples = negative_examples[
+                            :len(positive_examples)]  # let's keep ratio of positive to negatives ~ 1:1
         examples = positive_examples + negative_examples
         examples_with_titles_and_images = [
             (example[0],
@@ -80,3 +129,18 @@ def get_contrastive_loss_dataset(df: pd.DataFrame, seed=42):
     columns = ['posting_id_1', 'posting_id_2', 'image_1', 'image_2', 'title_1', 'title_2', 'label']
     contrastive_loss_df = pd.DataFrame(new_data, columns=columns)
     return contrastive_loss_df
+
+
+def get_arcface_loss_dataset(csv, data_dir, n_splits, n_samples=None):
+    df_train = pd.read_csv(csv)
+    if n_samples is not None:
+        df_train = df_train.sample(n_samples)
+    df_train['file_path'] = df_train.image.apply(lambda x: os.path.join(data_dir, x))
+    gkf = GroupKFold(n_splits=n_splits)
+    df_train['fold'] = -1
+    df_train = df_train.reset_index(drop=True)
+    for fold, (train_idx, valid_idx) in enumerate(gkf.split(df_train, None, df_train.label_group)):
+        df_train.loc[valid_idx, 'fold'] = fold
+    le = LabelEncoder()
+    df_train.label_group = le.fit_transform(df_train.label_group)
+    return df_train
