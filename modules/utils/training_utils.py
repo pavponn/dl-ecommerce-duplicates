@@ -113,12 +113,13 @@ def find_threshold(df, lower_count_thresh, upper_count_thresh, search_space, FEA
 			best_score = selected_score
 			best_threshold = i
 
-	plt.title(f'Threshold Finder for count in [{lower_count_thresh},{upper_count_thresh}].')
+	plt.title("F1-score vs threshol for cosine image similarity")
+	plt.xlabel("Threshold for cosine similarity")
+	plt.ylabel("Average F1-score")
 	plt.plot(score_by_threshold)
-	plt.axis('off')
+	plt.grid(True)
 	plt.show()
-	print(f'Best score is {best_score} and best threshold is {best_threshold/100}')
-    
+	print(f'Best score is {best_score} and best threshold is {best_threshold/100}')    
 
 def train_fn(dataloader,model,criterion,optimizer,device,scheduler,epoch):
     model.train()
