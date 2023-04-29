@@ -2,6 +2,7 @@ from tqdm import tqdm
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+from modules.utils.AverageMeter import AverageMeter
 
 def train_func(train_loader, model, criterion, optimizer, device, debug=False):
 	model.train()
@@ -117,3 +118,38 @@ def find_threshold(df, lower_count_thresh, upper_count_thresh, search_space, FEA
 	plt.axis('off')
 	plt.show()
 	print(f'Best score is {best_score} and best threshold is {best_threshold/100}')
+    
+
+def train_fn(dataloader,model,criterion,optimizer,device,scheduler,epoch):
+    model.train()
+    loss_score = AverageMeter()
+
+    tk0 = tqdm(enumerate(dataloader), total=len(dataloader))
+    for bi,d in tk0:
+
+        batch_size = d[0].shape[0]
+
+        input_ids = d[0]
+        attention_mask = d[1]
+        targets = d[2]
+
+        input_ids = input_ids.to(device)
+        attention_mask = attention_mask.to(device)
+        targets = targets.to(device)
+
+        optimizer.zero_grad()
+
+        output = model(input_ids,attention_mask,targets)
+
+        loss = criterion(output,targets)
+
+        loss.backward()
+        optimizer.step()
+
+        loss_score.update(loss.detach().item(), batch_size)
+        tk0.set_postfix(Train_Loss=loss_score.avg,Epoch=epoch,LR=optimizer.param_groups[0]['lr'])
+
+        if scheduler is not None:
+                scheduler.step()
+
+    return loss_score
