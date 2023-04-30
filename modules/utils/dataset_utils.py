@@ -11,14 +11,18 @@ Generic dataset utils.
 """
 
 
-def get_dataset(root: str, is_test=False):
+def get_dataset(root: str, is_test=False, file_name=None):
     """
     Get dataset as a pandas dataframe.
     :param root: folder where the .csv files are located
     :param is_test: whether to get test or train dataset
+    :param file_name: use specific filename if necessary
     :return: pandas dataframe
     """
-    name = "test.csv" if is_test else "train.csv"
+    if file_name is None:
+        name = "test.csv" if is_test else "train.csv"
+    else:
+        name = file_name
     df = pd.read_csv(root + name)
     images_folder = "test_images/" if is_test else "train_images/"
     df['image'] = root + images_folder + df['image']
