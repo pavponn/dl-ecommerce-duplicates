@@ -3,6 +3,7 @@ import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from modules.utils.AverageMeter import AverageMeter
+import gc
 
 def train_func(train_loader, model, criterion, optimizer, device, debug=False):
 	model.train()
@@ -119,9 +120,10 @@ def find_threshold(df, lower_count_thresh, upper_count_thresh, search_space, FEA
 	plt.show()
 	print(f'Best score is {best_score} and best threshold is {best_threshold/100}')
     
-
 def train_fn(dataloader,model,criterion,optimizer,device,scheduler,epoch):
+    model.mode_train = True
     model.train()
+
     loss_score = AverageMeter()
 
     tk0 = tqdm(enumerate(dataloader), total=len(dataloader))
@@ -153,3 +155,182 @@ def train_fn(dataloader,model,criterion,optimizer,device,scheduler,epoch):
                 scheduler.step()
 
     return loss_score
+
+
+def valid_fn(dataloader,model,criterion):
+    model.eval()
+    model.mode_train = False
+    embeds = []
+    losses = []
+    # loss_score = AverageMeter()
+
+    with torch.no_grad():
+        for input_ids, attention_mask,labels in tqdm(dataloader): 
+            input_ids = input_ids.cuda()
+            attention_mask = attention_mask.cuda()
+            labels = labels.cuda()
+            feat,outputs = model(input_ids, attention_mask,labels)
+            text_embeddings = feat.detach().cpu().numpy()
+            embeds.append(text_embeddings)
+
+            # Compute the validation loss
+            loss = criterion(outputs, labels)
+            losses.append(loss.item())
+            # loss_score.update(loss.detach().item(), 32)
+
+    loss_valid = np.mean(losses)
+    text_embeddings = np.concatenate(embeds)
+    # print(f'Our text embeddings shape is {text_embeddings.shape}')
+    del embeds
+    gc.collect()
+    return text_embeddings,loss_valid
+
+
+def train_and_valid_fn(trainloader,validloader,model,criterion,optimizer,device,scheduler,epoch):
+    model.mode_train = True
+    model.train()
+
+    train_loss_score = AverageMeter()
+
+    tk0 = tqdm(enumerate(trainloader), total=len(trainloader))
+    for bi,d in tk0:
+
+        batch_size = d[0].shape[0]
+
+        input_ids = d[0]
+        attention_mask = d[1]
+        targets = d[2]
+
+        input_ids = input_ids.to(device)
+        attention_mask = attention_mask.to(device)
+        targets = targets.to(device)
+
+        optimizer.zero_grad()
+
+        output = model(input_ids,attention_mask,targets)
+
+        loss = criterion(output,targets)
+
+        loss.backward()
+        optimizer.step()
+
+        train_loss_score.update(loss.detach().item(), batch_size)
+        tk0.set_postfix(Train_Loss=train_loss_score.avg,Epoch=epoch,LR=optimizer.param_groups[0]['lr'])
+
+        if scheduler is not None:
+                scheduler.step()
+
+    # return train_loss_score
+
+
+    model.eval()
+    model.mode_train = False
+    embeds = []
+    losses = []
+    # loss_score = AverageMeter()
+
+    with torch.no_grad():
+        for input_ids, attention_mask,labels in tqdm(validloader): 
+            input_ids = input_ids.cuda()
+            attention_mask = attention_mask.cuda()
+            labels = labels.cuda()
+            feat,output = model(input_ids, attention_mask,None)
+            text_embeddings = feat.detach().cpu().numpy()
+            embeds.append(text_embeddings)
+
+            # Compute the validation loss
+            loss = criterion(output, labels)
+            losses.append(loss.item())
+            # loss_score.update(loss.detach().item(), 32)
+
+    valid_loss_score = np.mean(losses)
+    text_embeddings = np.concatenate(embeds)
+    # print(f'Our text embeddings shape is {text_embeddings.shape}')
+    del embeds
+    gc.collect()
+    return text_embeddings,train_loss_score,valid_loss_score
+
+def train_triplet_fn(dataloader,model,criterion,optimizer,device,scheduler,epoch):
+    model.mode_train = True
+    model.train()
+
+    loss_score = AverageMeter()
+
+    tk0 = tqdm(enumerate(dataloader), total=len(dataloader))
+    for bi,d in tk0:
+
+        batch_size = d[0].shape[0]
+
+        anchor_input_ids, anchor_attention_mask = d[0],d[1]
+        positive_input_ids, positive_attention_mask = d[2],d[3]
+        negative_input_ids, negative_attention_mask = d[4],d[5]
+        targets = d[6]
+
+        anchor_input_ids = anchor_input_ids.to(device)
+        anchor_attention_mask = anchor_attention_mask.to(device)
+        positive_input_ids = positive_input_ids.to(device)
+        positive_attention_mask = positive_attention_mask.to(device)
+        negative_input_ids = negative_input_ids.to(device)
+        negative_attention_mask = negative_attention_mask.to(device)
+        targets = targets.to(device)
+
+        optimizer.zero_grad()
+
+        anchor = model(anchor_input_ids,anchor_attention_mask,targets)
+        positive = model(positive_input_ids,positive_attention_mask,targets)
+        negative = model(negative_input_ids,negative_attention_mask,targets)
+
+        loss = criterion(anchor,positive,negative)
+
+        loss.backward()
+        optimizer.step()
+
+        loss_score.update(loss.detach().item(), batch_size)
+        tk0.set_postfix(Train_Loss=loss_score.avg,Epoch=epoch,LR=optimizer.param_groups[0]['lr'])
+
+        if scheduler is not None:
+                scheduler.step()
+
+    return loss_score
+
+def valid_triplet_fn(dataloader,model,criterion,device):
+    model.eval()
+    model.mode_train = False
+    embeds = []
+    loss_score = AverageMeter()
+
+    with torch.no_grad():
+        tk0 = tqdm(enumerate(dataloader), total=len(dataloader))
+        for bi,d in tk0:
+
+            batch_size = d[0].shape[0]
+
+            anchor_input_ids, anchor_attention_mask = d[0],d[1]
+            positive_input_ids, positive_attention_mask = d[2],d[3]
+            negative_input_ids, negative_attention_mask = d[4],d[5]
+            targets = d[6]
+
+            anchor_input_ids = anchor_input_ids.to(device)
+            anchor_attention_mask = anchor_attention_mask.to(device)
+            positive_input_ids = positive_input_ids.to(device)
+            positive_attention_mask = positive_attention_mask.to(device)
+            negative_input_ids = negative_input_ids.to(device)
+            negative_attention_mask = negative_attention_mask.to(device)
+            targets = targets.to(device)
+
+            feat,anchor = model(anchor_input_ids,anchor_attention_mask,targets)
+            text_embeddings = feat.detach().cpu().numpy()
+            embeds.append(text_embeddings)
+
+            _,positive = model(positive_input_ids,positive_attention_mask,targets)
+            _,negative = model(negative_input_ids,negative_attention_mask,targets)
+
+            loss = criterion(anchor,positive,negative)
+
+            loss_score.update(loss.detach().item(), batch_size)
+    text_embeddings = np.concatenate(embeds)
+    print(f'validation loss is  {loss_score.val}')
+    # print(f'Our text embeddings shape is {text_embeddings.shape}')
+    del embeds
+    gc.collect()
+    return text_embeddings,loss_score
